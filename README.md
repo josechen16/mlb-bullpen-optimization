@@ -101,6 +101,7 @@ The pretrained model and associated feature-history artifacts are included for s
 - Simulated plate appearances use simplified baserunning and game-state transitions.
 - Model predictions depend on historical data and feature coverage.
 - Results are intended to support baseball decision-making rather than replace managerial judgment.
+- Supported Game Dates: Automatic game lookup currently supports MLB games after September 5, 2025. The XGBoost model was trained using data available through September 4, 2025. Games before September 5 are not supported in automatic mode to prevent data leakage.
 
 ## Project Status
 
