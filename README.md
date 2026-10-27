@@ -4,63 +4,74 @@
 
 This project develops a machine learning–based decision support system for MLB bullpen management. It combines an XGBoost plate-appearance outcome prediction model with Monte Carlo simulation to evaluate potential relief pitchers in historical game situations.
 
-The primary objective is to identify pitchers who minimize expected runs allowed or walk-off risk based on the current game situation.
+The objective is to compare bullpen alternatives under the same game conditions and identify pitchers who minimize expected runs allowed or walk-off risk.
 
-Rather than relying exclusively on traditional pitching statistics, the system incorporates historical pitcher–batter matchup information, game context, and probabilistic simulation to compare bullpen alternatives.
+Rather than predicting a single game outcome, the system estimates the risk associated with different pitching decisions.
 
-This repository contains the Checkpoint #1 implementation of an ongoing research project.
+This repository contains the Checkpoint #1 implementation of an ongoing academic research project.
+
+## Research Question
+
+**Which relief pitcher offers the lowest estimated risk in a specific MLB game situation?**
+
+The decision depends on the inning, score, base-out state, upcoming batting order, and potential relief pitchers.
+
+The system produces a ranked comparison of pitching alternatives using a context-dependent objective.
 
 ## Methodology
 
-The system consists of three main components.
+The system consists of four stages.
 
-### 1. Data Preparation
+### 1. Historical Game Reconstruction
 
-Historical Statcast data and MLB Stats API records are used to construct pitcher–batter matchup features and reconstruct game situations.
+Historical MLB game information is retrieved through the MLB Stats API.
 
-The system retrieves historical game information, identifies potential relief pitchers, and determines the relevant batting lineup and game state.
+The system reconstructs the selected game situation, including:
 
-### 2. Machine Learning: XGBoost
+- Date and inning
+- Score differential
+- Number of outs
+- Baserunner configuration
+- Upcoming batting order
+- Potential relief pitchers
 
-An XGBoost multiclass classification model estimates the probabilities of six plate-appearance outcomes:
+### 2. XGBoost Outcome Prediction
+
+A pretrained XGBoost multiclass classification model predicts six plate-appearance outcomes:
 
 1. Single
-2. Extra-base hit
+2. Extra-base hit (double or triple)
 3. Walk or hit-by-pitch
 4. Home run
 5. Strikeout
 6. Other out
 
-The model uses historical matchup features to estimate the probability distribution of these outcomes for each pitcher–batter matchup.
+The model uses historical Statcast-derived features to estimate outcome probabilities for pitcher–batter matchups.
 
-The training data cutoff is September 4, 2025. Games evaluated after this date are outside the model's training period.
+The training data cutoff is September 4, 2025.
 
 ### 3. Monte Carlo Simulation
 
-The system evaluates potential relief pitchers by simulating the remainder of a half-inning.
+For each candidate pitcher, the system simulates the remainder of the half-inning 10,000 times.
 
-For each candidate pitcher:
+During each simulation, the system samples plate-appearance outcomes from the XGBoost predictions and updates the simulated game state.
 
-1. Retrieve the current game situation.
-2. Generate plate-appearance outcome probabilities using the trained XGBoost model.
-3. Simulate subsequent plate appearances and update the game state.
-4. Repeat the simulation 10,000 times.
-5. Calculate expected runs allowed and relevant scoring probabilities.
-6. Rank pitchers according to the selected decision objective.
+The simulation produces estimates of:
 
-### Decision Metrics
+- Expected runs allowed
+- Probability of allowing at least one run
+- Probability of allowing at least two runs
+- Walk-off probability, when applicable
 
-**Expected Runs Allowed**
+### 4. Pitcher Ranking
 
-Measures the average number of runs surrendered across simulated half-innings. Lower values indicate better projected run prevention.
+The decision objective depends on the game situation.
 
-**Walk-off Probability**
+**Run Prevention:** Pitchers are ranked by expected runs allowed.
 
-Measures the simulated probability that the batting team scores enough runs to win during the evaluated half-inning.
+**Walk-off Prevention:** In applicable late-game situations, pitchers are ranked by the simulated probability of allowing a walk-off.
 
-For eligible walk-off situations, the system prioritizes minimizing walk-off probability rather than expected runs allowed.
-
-All reported probabilities are model-based simulation estimates, not observed real-world outcome frequencies.
+Lower estimated risk is preferred.
 
 ## Repository Structure
 
@@ -78,30 +89,30 @@ mlb-bullpen-optimization/
         ├── model_metadata.json
         ├── feature_history.pkl
         ├── pitcher_daily_workload.parquet
-        └── additional model evaluation artifacts
+        └── [model evaluation artifacts]
 ```
 
-### Main Files
+### Main Components
 
-| File | Description |
+| File | Purpose |
 |---|---|
-| `simulation.py` | Reconstructs historical game situations, evaluates bullpen candidates, runs Monte Carlo simulations, and generates visualizations. |
-| `bullpen_train_quick.py` | Implements the XGBoost model training pipeline. |
-| `bullpen_predict.py` | Contains prediction-related functionality. |
-| `bullpen_game_setup.py` | Supports historical game setup and data preparation. |
-| `requirements.txt` | Lists the Python dependencies required by the project. |
-| `results/bullpen_quick/` | Contains the pretrained model, feature history, workload data, and evaluation artifacts. |
+| `simulation.py` | Historical game reconstruction, bullpen evaluation, Monte Carlo simulation, and visualization |
+| `bullpen_train_quick.py` | XGBoost training pipeline |
+| `bullpen_predict.py` | Model prediction functionality |
+| `bullpen_game_setup.py` | Historical game setup and data preparation |
+| `requirements.txt` | Python dependencies |
+| `results/bullpen_quick/` | Pretrained model, historical features, workload data, and evaluation artifacts |
 
-Generated simulation outputs are stored separately under `results/bullpen_demo/`.
+Simulation dashboards are generated under `results/bullpen_demo/`.
 
 ## Installation
 
 ### Requirements
 
-- Python 3.10 or later is recommended, subject to compatibility with the pinned dependencies.
+- Python 3.10 or later is recommended, subject to dependency compatibility.
 - Git
-- Internet connection for retrieving historical MLB game information
-- Python packages listed in `requirements.txt`
+- Internet connection for historical MLB game retrieval
+- Dependencies listed in `requirements.txt`
 
 The project was developed and tested on macOS.
 
@@ -118,16 +129,10 @@ cd mlb-bullpen-optimization
 python3 -m venv venv
 ```
 
-Activate the environment on macOS or Linux:
+Activate on macOS or Linux:
 
 ```bash
 source venv/bin/activate
-```
-
-On Windows PowerShell:
-
-```powershell
-venv\Scripts\Activate.ps1
 ```
 
 ### Step 3: Install Dependencies
@@ -136,27 +141,23 @@ venv\Scripts\Activate.ps1
 python3 -m pip install -r requirements.txt
 ```
 
-### Step 4: Verify the Installation
-
-Check that the required libraries can be imported:
+### Step 4: Verify Dependencies
 
 ```bash
 python3 -c "import xgboost, pandas, numpy, sklearn, matplotlib, pybaseball; print('Dependencies loaded successfully')"
 ```
 
-The pretrained model and associated feature-history files are already included in the repository. Retraining is not required to reproduce the provided bullpen simulations.
+The pretrained model is included in the repository. Retraining is not required to execute the examples below.
 
 ## Reproducing the Analysis
 
-### Supported Game Dates
+### Supported Dates
 
-Automatic historical game lookup currently supports games dated September 5, 2025, through December 31, 2025.
+Automatic game lookup currently supports historical MLB games from **September 5, 2025, through December 31, 2025**.
 
-The XGBoost model uses training data available through September 4, 2025.
+The XGBoost training data cutoff is September 4, 2025, so the evaluated games occur after the training period.
 
-This separation helps prevent the evaluated games from being included in the model's training period.
-
-The supported date range does not imply that an MLB game exists on every date. Users must select a valid game and inning.
+Games must exist on the specified date, and the selected inning must be valid.
 
 ### Command Format
 
@@ -164,56 +165,113 @@ The supported date range does not imply that an MLB game exists on every date. U
 python3 simulation.py --date YYYY-MM-DD --team TEAM --opponent OPPONENT --inning N
 ```
 
-Arguments:
-
 | Argument | Description |
 |---|---|
-| `--date` | Historical game date in YYYY-MM-DD format |
+| `--date` | Historical game date |
 | `--team` | Pitching team being evaluated |
 | `--opponent` | Batting team |
 | `--inning` | Inning to evaluate |
 
-**Important:** The `--team` argument always refers to the defensive team whose bullpen is being evaluated, not necessarily the home team.
+**Important:** `--team` refers to the pitching team, not necessarily the home team.
 
-Team abbreviations must match those recognized by the MLB Stats API. For example, use `AZ` for the Arizona Diamondbacks.
+For the Arizona Diamondbacks, use `AZ` rather than `ARI`.
+
+## Checkpoint #1 Presentation Results
+
+The following two cases correspond to the results presented in the Checkpoint #1 slides.
+
+### Case A: Los Angeles Dodgers at Baltimore Orioles
+
+**Date:** September 5, 2025  
+**Inning:** 8  
+**Pitching team:** Los Angeles Dodgers  
+**Batting team:** Baltimore Orioles  
+**Decision objective:** Minimize expected runs allowed
+
+Run:
+
+```bash
+python3 simulation.py --date 2025-09-05 --team LAD --opponent BAL --inning 8
+```
+
+Reference results:
+
+| Pitcher | Expected Runs Allowed |
+|---|---:|
+| Justin Wrobleski | 0.317 |
+| Michael Kopech (actual) | 0.330 |
+| Tanner Scott | 0.332 |
+| Kirby Yates | 0.345 |
+| Edgardo Henriquez | 0.377 |
+
+The model ranks Justin Wrobleski first, while Michael Kopech was the actual pitching choice.
+
+The difference between their simulated expected runs allowed is **0.013 runs**.
+
+This difference is small and does not establish that the model's recommendation was superior.
+
+### Case B: Pittsburgh Pirates at Baltimore Orioles
+
+**Date:** September 9, 2025  
+**Inning:** 11  
+**Pitching team:** Pittsburgh Pirates  
+**Batting team:** Baltimore Orioles  
+**Decision objective:** Minimize walk-off probability
+
+Run:
+
+```bash
+python3 simulation.py --date 2025-09-09 --team PIT --opponent BAL --inning 11
+```
+
+Reference results:
+
+| Pitcher | Estimated Walk-off Probability |
+|---|---:|
+| Yohan Ramírez | 34.52% |
+| Evan Sisk | 35.87% |
+| Dauri Moreta (actual) | 36.16% |
+| Bubba Chandler | 38.60% |
+| Carmen Mlodzinski | 38.90% |
+| Colin Holderman | 40.65% |
+
+This example evaluates a tied game in the bottom of the eleventh inning, with an automatic runner starting on second base.
+
+The model ranks Yohan Ramírez as the lowest simulated walk-off-risk candidate.
+
+The actual pitcher, Dauri Moreta, has an estimated walk-off probability of 36.16%, compared with 34.52% for Yohan Ramírez.
+
+The difference is **1.64 percentage points**.
+
+These estimates are not evidence that a different managerial decision would necessarily have changed the outcome.
+
+## Additional Live Demonstrations
+
+The following examples demonstrate the same system on additional historical games.
 
 ### Example 1: Kansas City Royals vs. Cleveland Guardians
 
 **Date:** September 11, 2025  
-**Situation:** Eighth inning  
-**Pitching team:** Kansas City Royals  
-**Batting team:** Cleveland Guardians
-
-Run:
+**Inning:** 8  
+**Pitching team:** Kansas City Royals
 
 ```bash
 python3 simulation.py --date 2025-09-11 --team KC --opponent CLE --inning 8
 ```
 
-The system reconstructs the selected historical situation and compares eligible Kansas City relief pitchers.
-
-The simulation evaluates their projected run prevention and ranks the candidates according to the applicable decision metric.
-
 ### Example 2: Arizona Diamondbacks vs. Minnesota Twins
 
 **Date:** September 12, 2025  
-**Situation:** Bottom of the ninth inning  
-**Pitching team:** Arizona Diamondbacks  
-**Batting team:** Minnesota Twins
-
-Run:
+**Inning:** 9  
+**Pitching team:** Arizona Diamondbacks
 
 ```bash
 python3 simulation.py --date 2025-09-12 --team AZ --opponent MIN --inning 9
 ```
 
-For this historical situation, Arizona enters the evaluated half-inning with a two-run lead.
+In this example, Arizona enters the bottom of the ninth inning with a two-run lead.
 
-The system evaluates potential relief pitchers using 10,000 Monte Carlo simulations per candidate and ranks them by simulated walk-off probability.
-
-### Reference Results: Example 2
-
-The following results were obtained from a successful local execution of the pretrained model.
+Reference results from a successful local execution:
 
 | Pitcher ID | Throws | Expected Runs | Walk-off Probability |
 |---|---|---:|---:|
@@ -223,131 +281,99 @@ The following results were obtained from a successful local execution of the pre
 | 663765 | R | 0.416 | 4.95% |
 | 595928 | R | 0.418 | 4.96% |
 
-The model identifies pitcher ID 685314 as the lowest simulated walk-off-risk candidate in this example.
+Pitcher ID 685314 has the lowest simulated walk-off probability in this evaluation.
 
 The estimated difference between the lowest-risk and highest-risk candidates is 1.16 percentage points.
 
-These results are provided as a reproducibility reference. Individual simulation estimates may vary slightly due to Monte Carlo randomness.
+### Example 3: Philadelphia Phillies vs. Los Angeles Dodgers
 
-### Expected Program Output
+**Date:** October 9, 2025  
+**Inning:** 11  
+**Pitching team:** Philadelphia Phillies  
+**Batting team:** Los Angeles Dodgers
 
-A successful simulation prints information including:
+```bash
+python3 simulation.py --date 2025-10-09 --team PHI --opponent LAD --inning 11
+```
 
-- Historical game date and inning
-- Number of outs and baserunner configuration
-- Current pitching-team lead
-- Model training cutoff date
-- Number of Monte Carlo simulations per pitcher
+**Postseason caution:** This example is included as an additional test case, not a validated reference result. MLB postseason extra innings do not use the regular-season automatic runner rule. The program's handling of this situation must be verified before using its output for baseball conclusions.
+
+## Expected Outputs
+
+After a successful simulation, the terminal displays:
+
+- Game date and inning
+- Number of outs and occupied bases
+- Pitching-team score differential
+- Model training cutoff
+- Number of Monte Carlo simulations
 - Candidate pitcher rankings
 - Expected runs allowed
-- Scoring and walk-off probabilities, when applicable
+- Relevant scoring or walk-off probabilities
 
-The program also generates visualization outputs under:
+The program also saves visualization outputs under:
 
 ```text
 results/bullpen_demo/
 ```
 
-Outputs are organized by game date, matchup, and inning.
+Results are organized by game date, matchup, and inning.
 
-For example, the Arizona–Minnesota simulation generates files within the corresponding September 12, 2025 matchup directory.
+To reproduce a result from the presentation:
 
-The exact filenames and directory contents depend on the simulation output.
+1. Install the project dependencies.
+2. Use the included pretrained XGBoost model.
+3. Run the exact command for Case A or Case B.
+4. Compare the terminal rankings and generated visualization with the reference results above.
 
-### Reproducing Presentation Results
-
-The examples above are intended to provide directly executable demonstrations of the bullpen decision-support workflow.
-
-To reproduce a presented result:
-
-1. Clone the repository and install the dependencies.
-2. Use the pretrained model included in `results/bullpen_quick/`.
-3. Run the exact game command associated with the presented example.
-4. Review the terminal rankings and generated visualization files.
-5. Compare the simulated expected runs and scoring probabilities with the presentation results.
-
-The model does not need to be retrained to execute these demonstrations.
+Monte Carlo results may vary slightly between runs because of simulation randomness.
 
 ## Model Training
 
-The training pipeline is implemented in:
+The model training pipeline is implemented in `bullpen_train_quick.py`.
 
-```text
-bullpen_train_quick.py
-```
+Historical Statcast data is stored locally under `data/` and is not included in the GitHub repository because of its size.
 
-Historical Statcast training data is stored locally in the `data/` directory and is not included in this repository because of its size.
+The pretrained model and associated feature-history artifacts are included to support reproduction of the bullpen simulations.
 
-The repository includes the pretrained XGBoost model and associated feature-history artifacts required for the demonstrated simulations.
+Reproducing model training from scratch requires obtaining the historical training data and preparing the corresponding features.
 
-Reproducing model training from scratch requires obtaining the corresponding historical data and preparing it for the training pipeline.
+**Reproducibility scope:** This checkpoint supports reproducing bullpen simulations with the pretrained model. Full retraining from raw data is not provided as a one-command workflow.
 
-**Scope of reproducibility:** The provided commands reproduce the simulation workflow using the included pretrained model. Full end-to-end retraining from raw Statcast data is not provided as a one-command workflow in this checkpoint.
+## Simulation Assumptions and Limitations
 
-## Simulation Assumptions
+The current implementation includes several simplifying assumptions:
 
-The current implementation uses several simplifying assumptions:
-
-- Each candidate relief pitcher is assumed to pitch the remainder of the evaluated half-inning.
-- Plate-appearance probabilities are estimated using the pretrained XGBoost model.
-- Pitcher fatigue is not dynamically updated during a simulated half-inning.
+- Each candidate pitcher is assumed to pitch the remainder of the evaluated half-inning.
+- Pitcher fatigue is not dynamically updated during the simulated inning.
 - Same-day pitch counts may be used for eligibility filtering but are not direct XGBoost prediction features.
-- Baserunning and game-state transitions are simplified relative to all possible MLB situations.
-- The system uses publicly available information and cannot fully reconstruct every bullpen availability decision.
+- Baserunning and game-state transitions are simplified.
+- Public data cannot fully determine pitcher health, warm-up status, or bullpen availability.
+- Candidate eligibility and historical availability may be incomplete.
+- Model predictions depend on historical feature coverage.
+- Small estimated differences may not be statistically or practically meaningful.
+- Monte Carlo uncertainty does not account for all sources of model uncertainty.
+- Special game situations, including postseason extra innings, require additional validation.
 
-Special situations, particularly postseason extra innings, require additional verification because postseason rules differ from regular-season extra-inning rules.
-
-## Limitations
-
-The current system has several limitations.
-
-**Bullpen Availability**
-
-Publicly available data cannot fully determine pitcher health, warm-up status, coaching instructions, or actual game-day availability.
-
-**Prediction Uncertainty**
-
-The XGBoost model estimates outcome probabilities using historical data. Predictions may be less reliable for players or matchup situations with limited feature coverage.
-
-**Simplified Game Simulation**
-
-The Monte Carlo framework approximates plate appearances and baserunning rather than reproducing every detail of an MLB game.
-
-**Monte Carlo Variability**
-
-Simulation estimates may vary slightly between executions. Small differences in projected probabilities should not automatically be interpreted as meaningful differences in pitcher quality.
-
-**Historical Evaluation**
-
-The current implementation is designed for historical game analysis. Its recommendations should not be interpreted as validated real-time MLB bullpen decisions.
-
-**Decision Support, Not Decision Replacement**
-
-The objective is to provide quantitative information that can support managerial decisions, not to replace coaching expertise or game-specific judgment.
+The system is designed to support baseball decision-making rather than replace managerial judgment.
 
 ## Project Status and Future Work
 
 This repository represents the Checkpoint #1 implementation of an ongoing MLB bullpen optimization research project.
 
-Current capabilities include:
+Current capabilities include historical game reconstruction, XGBoost-based outcome prediction, Monte Carlo bullpen evaluation, context-specific pitcher rankings, and visualization dashboards.
 
-- Historical MLB game-state reconstruction
-- XGBoost-based plate-appearance outcome prediction
-- Monte Carlo evaluation of potential relief pitchers
-- Expected-runs and walk-off-risk comparisons
-- Automated pitcher rankings and visualization outputs
+Future work will focus on:
 
-Planned improvements include:
-
-- More comprehensive model validation and calibration
-- Improved bullpen availability and fatigue modeling
-- More realistic baserunning and game-state transitions
-- Better handling of special game situations and postseason rules
+- Improved pitcher availability and fatigue modeling
+- More realistic game-state transitions
+- Model validation and calibration
+- Better handling of postseason and special game rules
 - Expanded historical case studies
-- Evaluation of decision quality against observed managerial choices
+- Evaluation of decision quality against actual managerial decisions
 
 ## Intended Use
 
 This project is developed for academic research and educational purposes.
 
-Simulation outputs represent estimated probabilities under the model's assumptions and should not be interpreted as guaranteed baseball outcomes.
+All reported simulation probabilities are model-based estimates and should not be interpreted as guaranteed real-world outcomes.
